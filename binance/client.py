@@ -22,6 +22,7 @@ class BaseClient:
     MARGIN_API_URL = 'https://api.binance.{}/sapi'
     WEBSITE_URL = 'https://www.binance.{}'
     FUTURES_URL = 'https://fapi.binance.{}/fapi'
+    SWAP_URL = 'https://api.binance.{}/sapi'
     FUTURES_TESTNET_URL = 'https://testnet.binancefuture.com/fapi'
     FUTURES_DATA_URL = 'https://fapi.binance.{}/futures/data'
     FUTURES_DATA_TESTNET_URL = 'https://testnet.binancefuture.com/futures/data'
@@ -35,6 +36,7 @@ class BaseClient:
     PRIVATE_API_VERSION = 'v3'
     MARGIN_API_VERSION = 'v1'
     FUTURES_API_VERSION = 'v1'
+    SWAP_API_VERSION = 'v1'
     FUTURES_API_VERSION2 = "v2"
     OPTIONS_API_VERSION = 'v1'
 
@@ -145,6 +147,7 @@ class BaseClient:
         self.MARGIN_API_URL = self.MARGIN_API_URL.format(tld)
         self.WEBSITE_URL = self.WEBSITE_URL.format(tld)
         self.FUTURES_URL = self.FUTURES_URL.format(tld)
+        self.SWAP_URL = self.SWAP_URL.format(tld)
         self.FUTURES_DATA_URL = self.FUTURES_DATA_URL.format(tld)
         self.FUTURES_COIN_URL = self.FUTURES_COIN_URL.format(tld)
         self.FUTURES_COIN_DATA_URL = self.FUTURES_COIN_DATA_URL.format(tld)
@@ -190,6 +193,10 @@ class BaseClient:
         if self.testnet:
             url = self.FUTURES_TESTNET_URL
         return url + '/' + self.FUTURES_API_VERSION + '/' + path
+
+    def _create_swap_api_uri(self, path: str) -> str:
+        url = self.SWAP_URL
+        return url + '/' + self.SWAP_API_VERSION + '/bswap/' + path
 
     def _create_futures_data_api_uri(self, path: str) -> str:
         url = self.FUTURES_DATA_URL
@@ -335,6 +342,11 @@ class Client(BaseClient):
 
     def _request_futures_api(self, method, path, signed=False, **kwargs) -> Dict:
         uri = self._create_futures_api_uri(path)
+
+        return self._request(method, uri, signed, True, **kwargs)
+
+    def _request_swap_api(self, method, path, signed=False, **kwargs) -> Dict:
+        uri = self._create_swap_api_uri(path)
 
         return self._request(method, uri, signed, True, **kwargs)
 
@@ -1323,7 +1335,6 @@ class Client(BaseClient):
                 "price": "0.00000000",
                 "origQty": "10.00000000",
                 "executedQty": "10.00000000",
-                "cummulativeQuoteQty": "10.00000000",
                 "status": "FILLED",
                 "timeInForce": "GTC",
                 "type": "MARKET",
@@ -1342,7 +1353,6 @@ class Client(BaseClient):
                 "price": "0.00000000",
                 "origQty": "10.00000000",
                 "executedQty": "10.00000000",
-                "cummulativeQuoteQty": "10.00000000",
                 "status": "FILLED",
                 "timeInForce": "GTC",
                 "type": "MARKET",
@@ -6038,6 +6048,22 @@ class Client(BaseClient):
         }
         return self._request_futures_api('delete', 'listenKey', signed=False, data=params)
 
+    # SWAP API
+    def swap_pools(self):
+        return self._request_swap_api('get', 'pools')
+
+    def swap_quote(self, **params):
+        return self._request_swap_api('get', 'quote', True, data=params)
+
+    def swap_trade(self, **params):
+        return self._request_swap_api('post', 'swap', True, data=params)
+
+    def swap_liquidity(self, **params):
+        return self._request_swap_api('get', 'liquidity', True, data=params)
+
+    def swap_get_history(self, **params):
+        return self._request_swap_api('get', 'swap', True, data=params)
+
     # COIN Futures API
     def futures_coin_ping(self):
         """Test connectivity to the Rest API
@@ -7153,7 +7179,6 @@ class AsyncClient(BaseClient):
     async def _request(self, method, uri: str, signed: bool, force_params: bool = False, **kwargs):
 
         kwargs = self._get_request_kwargs(method, signed, force_params, **kwargs)
-
         async with getattr(self.session, method)(uri, **kwargs) as response:
             self.response = response
             return await self._handle_response(response)
@@ -7177,6 +7202,11 @@ class AsyncClient(BaseClient):
 
     async def _request_futures_api(self, method, path, signed=False, **kwargs) -> Dict:
         uri = self._create_futures_api_uri(path)
+
+        return await self._request(method, uri, signed, True, **kwargs)
+
+    async def _request_swap_api(self, method, path, signed=False, **kwargs) -> Dict:
+        uri = self._create_swap_api_uri(path)
 
         return await self._request(method, uri, signed, True, **kwargs)
 
@@ -7986,6 +8016,21 @@ class AsyncClient(BaseClient):
     async def futures_exchange_info(self):
         return await self._request_futures_api('get', 'exchangeInfo')
 
+    async def swap_pools(self):
+        return await self._request_swap_api('get', 'pools')
+
+    async def swap_quote(self, **params):
+        return await self._request_swap_api('get', 'quote', True, data=params)
+
+    async def swap_trade(self, **params):
+        return await self._request_swap_api('post', 'swap', True, data=params)
+
+    async def swap_liquidity(self, **params):
+        return await self._request_swap_api('get', 'liquidity', True, data=params)
+
+    async def swap_get_history(self, **params):
+        return await self._request_swap_api('get', 'swap', True, data=params)
+
     async def futures_order_book(self, **params):
         return await self._request_futures_api('get', 'depth', data=params)
 
@@ -8005,7 +8050,7 @@ class AsyncClient(BaseClient):
         return await self._request_futures_api('get', 'continuousKlines', data=params)
 
     async def futures_historical_klines(self, symbol, interval, start_str, end_str=None, limit=500):
-        return self._historical_klines(symbol, interval, start_str, end_str=end_str, limit=limit, klines_type=HistoricalKlinesType.FUTURES)
+        return await self._historical_klines(symbol, interval, start_str, end_str=end_str, limit=limit, klines_type=HistoricalKlinesType.FUTURES)
 
     async def futures_historical_klines_generator(self, symbol, interval, start_str, end_str=None):
         return self._historical_klines_generator(symbol, interval, start_str, end_str=end_str, klines_type=HistoricalKlinesType.FUTURES)
